@@ -1,0 +1,427 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASPE Iberoamérica | Intranet & Videointerpretación</title>
+    <link rel="stylesheet" href="{% static 'intranet/styles.css' %}">
+    <!-- Script Oficial de Jitsi Meet API para Videollamadas WebRTC Reales -->
+    <script src="https://meet.jit.si/external_api.js"></script>
+</head>
+<body>
+
+    <!-- 1. PANTALLA DE LOGIN (INICIO) -->
+    <div id="login-screen" class="login-wrapper">
+        <div class="login-card">
+            <div class="brand-center">
+                <div class="brand-logo-lg">🤟</div>
+                <h1>CASPE Iberoamérica</h1>
+                <p class="text-muted">Plataforma Internacional de Capacitación y Videointerpretación</p>
+            </div>
+
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Correo Electrónico</label>
+                    <input type="email" id="login-email" value="cliente@hospital.cl" required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="login-pass" value="123456" required>
+                </div>
+                <div class="form-group">
+                    <label>Seleccionar Perfil de Ingreso (Vista Cliente / Vista Admin)</label>
+                    <select id="login-role" onchange="autofillDemoCredentials()">
+                        <option value="cliente">🏢 Vista Cliente / Empresa (Hospital Regional)</option>
+                        <option value="admin">🛡️ Vista Administrador / Intérprete CASPE</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-primary full-width btn-large">
+                    Ingresar a la Intranet
+                </button>
+            </form>
+
+            <div class="login-Demo-info">
+                <span>🌐 Dominios: <strong>caspe.com / caspe.cl</strong></span>
+                <span>🗄️ Motor: <strong>Django + SQLite3</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. APLICACIÓN PRINCIPAL -->
+    <div id="app-wrapper" class="app-wrapper hidden">
+        
+        <!-- NAVBAR SUPERIOR -->
+        <header class="navbar">
+            <div class="navbar-brand">
+                <div class="brand-logo">🤟</div>
+                <div>
+                    <span class="brand-title">CASPE</span>
+                    <span class="brand-subtitle">Iberoamérica</span>
+                </div>
+            </div>
+
+            <nav class="navbar-links">
+                <button class="nav-btn active" id="nav-cursos" onclick="navigateTo('cursos')">
+                    🎓 Cursos de Capacitación (Inicio)
+                </button>
+
+                <!-- Pestañas Vista Cliente -->
+                <button class="nav-btn role-cliente" id="nav-solicitar" onclick="navigateTo('solicitar')">
+                    🎥 Solicitar Reunión / Intérprete
+                </button>
+                <button class="nav-btn role-cliente" id="nav-mi-cuenta" onclick="navigateTo('mi-cuenta')">
+                    📊 Mi Plan y Minutos
+                </button>
+
+                <!-- Pestañas Vista Administrador -->
+                <button class="nav-btn role-admin hidden" id="nav-admin-panel" onclick="navigateTo('admin-panel')">
+                    🛡️ Panel Administrador
+                </button>
+                <button class="nav-btn role-admin hidden" id="nav-admin-consola" onclick="navigateTo('admin-consola')">
+                    🎧 Atender Reuniones <span class="badge" id="nav-queue-badge">0</span>
+                </button>
+            </nav>
+
+            <div class="navbar-user">
+                <div class="user-info">
+                    <strong id="user-display-name">Usuario</strong>
+                    <span id="user-display-role" class="badge">Rol</span>
+                </div>
+                <button class="btn-outline" onclick="handleLogout()">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <!-- CONTENEDOR DE VISTAS -->
+        <main class="main-container">
+
+            <!-- VISTA 1: PÁGINA PRINCIPAL - CURSOS DE CAPACITACIÓN -->
+            <section id="view-cursos" class="view-section active">
+                <div class="hero-banner">
+                    <div>
+                        <span class="badge badge-accent">Página Principal • E-Learning & Accesibilidad</span>
+                        <h2>Academia Internacional de Lengua de Señas CASPE</h2>
+                        <p>Capacitación certificada para empresas, instituciones públicas y equipos de atención al público en Chile e Iberoamérica.</p>
+                    </div>
+                    <div class="hero-actions role-cliente">
+                        <button class="btn-primary btn-large" onclick="navigateTo('solicitar')">
+                            🤟 ¿Necesitas atención ahora? Solicitar Reunión
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Formulario exclusivo Admin para agregar nuevos cursos a SQLite -->
+                <div class="card mb-large role-admin hidden">
+                    <h3>➕ Publicar Nuevo Curso de Capacitación en SQLite (Vista Admin)</h3>
+                    <form onsubmit="crearCurso(event)" class="admin-inline-form mt-small">
+                        <input type="text" id="nuevo-curso-titulo" placeholder="Título del curso (Ej: LSCh para Atención Bancaria)" required>
+                        <select id="nuevo-curso-nivel">
+                            <option value="Básico">Nivel Básico</option>
+                            <option value="Intermedio">Nivel Intermedio</option>
+                            <option value="Avanzado">Nivel Avanzado</option>
+                        </select>
+                        <input type="number" id="nuevo-curso-modulos" placeholder="N° Módulos" value="8" min="1" required>
+                        <input type="text" id="nuevo-curso-idioma" placeholder="Idioma (LSCh / SSI)" value="LSCh" required>
+                        <button type="submit" class="btn-primary">Guardar Curso</button>
+                    </form>
+                </div>
+
+                <div class="section-header">
+                    <h3>📚 Cursos de Capacitación Disponibles</h3>
+                </div>
+
+                <div class="courses-grid" id="courses-container"></div>
+            </section>
+
+            <!-- VISTA 2 (CLIENTE): SOLICITAR REUNIÓN / VIDEOINTERPRETACIÓN -->
+            <section id="view-solicitar" class="view-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <span class="badge">Servicio de Videointerpretación</span>
+                        <h2 class="mt-small">📲 Solicitar Reunión con Intérprete</h2>
+                        <p class="section-desc mb-large">
+                            Conéctate en segundos con un intérprete certificado de CASPE mediante tu enlace o código QR institucional.
+                        </p>
+
+                        <div class="form-group-stack">
+                            <div>
+                                <label class="form-label">Institución / Empresa Asociada:</label>
+                                <select id="qr-empresa" class="full-width"></select>
+                            </div>
+                            <div>
+                                <label class="form-label">Modalidad de Atención:</label>
+                                <select id="qr-modalidad" class="full-width">
+                                    <option value="Inmediata (QR / Web)">⚡ Atención Inmediata en Vivo (QR / Web)</option>
+                                    <option value="Reunión Programada">📅 Reunión de Interpretación Simultánea</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Solicitante / Módulo de Atención:</label>
+                                <input type="text" id="qr-usuario" value="Módulo de Atención Presencial" class="full-width">
+                            </div>
+                            <div>
+                                <label class="form-label">Motivo de la Reunión:</label>
+                                <input type="text" id="qr-motivo" value="Asistencia en Lengua de Señas para usuario sordo" class="full-width">
+                            </div>
+
+                            <button class="btn-primary btn-large full-width" onclick="solicitarInterprete()">
+                                🎥 Iniciar Solicitud de Intérprete Ahora
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>📡 Cabina / Estado de Conexión del Cliente</h3>
+                        <p class="section-desc">Si todos los intérpretes están ocupados, el sistema te mantendrá en espera automáticamente.</p>
+                        <div id="qr-status-box" class="video-box">
+                            <p class="video-placeholder-text">
+                                Completa los datos a la izquierda y presiona <strong>"Iniciar Solicitud"</strong> para conectar con un intérprete.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 3 (CLIENTE): MI PLAN Y MINUTOS -->
+            <section id="view-mi-cuenta" class="view-section">
+                <div class="kpi-grid">
+                    <div class="card">
+                        <div class="kpi-title">EMPRESA REGISTRADA</div>
+                        <div class="kpi-value" style="font-size: 1.5rem;">Hospital Regional</div>
+                        <div class="kpi-sub">
+                            <button class="btn-outline btn-small mt-small" onclick="mostrarModalQR('Hospital Regional', 'QR-HOSP-REG-01')">
+                                📱 Ver Mi Código QR Institucional
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-title">PLAN CONTRATADO</div>
+                        <div class="kpi-value" style="font-size: 1.5rem;">Corporativo 24/7</div>
+                        <div class="kpi-sub">2,500 Minutos Mensuales</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-title">MINUTOS UTILIZADOS</div>
+                        <div class="kpi-value" id="cliente-minutos-usados">0</div>
+                        <div class="kpi-sub" id="cliente-minutos-restantes">Cargando...</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📋 Mi Historial de Atenciones y Reuniones</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código Sala</th>
+                                <th>Intérprete Asignado</th>
+                                <th>Fecha / Hora</th>
+                                <th>Duración Real</th>
+                                <th>Minutos Descontados</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial-cliente"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- VISTA 4 (ADMIN): PANEL ADMINISTRADOR -->
+            <section id="view-admin-panel" class="view-section">
+                <div class="kpi-grid">
+                    <div class="card">
+                        <div class="kpi-title">INTÉRPRETES DISPONIBLES</div>
+                        <div class="kpi-value" id="kpi-disponibles">0 / 0</div>
+                        <div class="kpi-sub">Gestión de turnos en vivo</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-title">CLIENTES EN COLA DE ESPERA</div>
+                        <div class="kpi-value text-warning" id="kpi-cola">0</div>
+                        <div class="kpi-sub">Esperando videointerpretación</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-title">MINUTOS TOTALES FACTURADOS</div>
+                        <div class="kpi-value" id="kpi-minutos">0</div>
+                        <div class="kpi-sub">Acumulado global en SQLite</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-title">ATENCIONES REALIZADAS</div>
+                        <div class="kpi-value" id="kpi-atenciones">0</div>
+                        <div class="kpi-sub">Registradas en Historial</div>
+                    </div>
+                </div>
+
+                <!-- Formulario Admin para registrar nuevas empresas clientes y generar su QR -->
+                <div class="card mb-large">
+                    <h3>🏢 Registrar Nueva Empresa Cliente y Generar Código QR</h3>
+                    <form onsubmit="crearEmpresa(event)" class="admin-inline-form mt-small">
+                        <input type="text" id="nueva-emp-nombre" placeholder="Nombre Empresa / Institución (Ej: Clínica Maule)" required>
+                        <input type="text" id="nueva-emp-pais" placeholder="País (Ej: Chile, México)" value="Chile" required>
+                        <input type="number" id="nueva-emp-minutos" placeholder="Minutos Contratados" value="1500" min="100" required>
+                        <button type="submit" class="btn-primary">+ Registrar Empresa y Crear QR</button>
+                    </form>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>👥 Control de Turnos e Intérpretes</h3>
+                        <p class="section-desc">Cambia la disponibilidad para simular intérpretes ocupados o libres.</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Intérprete</th>
+                                    <th>Lengua</th>
+                                    <th>Estado</th>
+                                    <th>Acción Admin</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-interpretes"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="card">
+                        <h3>🏢 Empresas Clientes, Planes y Códigos QR</h3>
+                        <p class="section-desc">Haz clic en "📱 Ver QR" para generar el código de acceso de cada institución.</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Empresa</th>
+                                    <th>Código QR</th>
+                                    <th>Uso de Minutos</th>
+                                    <th>Progreso</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-empresas"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 Auditoría Global de Sesiones de Videointerpretación</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID Sala</th>
+                                <th>Empresa Cliente</th>
+                                <th>Intérprete</th>
+                                <th>Fecha / Hora</th>
+                                <th>Duración</th>
+                                <th>Minutos Facturados</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- VISTA 5 (ADMIN): CONSOLA PARA ATENDER REUNIONES CON JITSI MEET -->
+            <section id="view-admin-consola" class="view-section">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>🎧 Cola de Solicitudes de Reunión Entrantes</h3>
+                        <p class="section-desc mb-medium">
+                            Al presionar "Contestar", se iniciará la videollamada real con cámara y micrófono mediante Jitsi Meet.
+                        </p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Empresa</th>
+                                    <th>Solicitante / Motivo</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-consola-interprete"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="card">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>🎥 Cabina de Videointerpretación WebRTC (Jitsi Meet)</h3>
+                            <span id="live-timer-badge" class="badge hidden" style="background: var(--danger); font-size: 0.9rem;">🔴 00:00</span>
+                        </div>
+                        <div id="cabin-box" class="video-box">
+                            <p class="text-muted">Sin videollamada activa. Selecciona "Contestar" en una solicitud de la cola.</p>
+                        </div>
+                        <div id="cabin-controls" class="cabin-controls">
+                            <div>
+                                <strong id="call-client-name">Cliente</strong><br>
+                                <span class="text-small-muted" id="call-interpreter-name">Intérprete</span>
+                            </div>
+                            <button class="btn-danger" onclick="finalizarLlamada()">
+                                ⏹️ Colgar Videollamada y Facturar Minutos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MODAL EMERGENTE PARA CÓDIGO QR DE EMPRESAS -->
+    <div id="qr-modal" class="modal-overlay hidden" onclick="cerrarModalQR(event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <span class="badge badge-accent">Acceso Rápido CASPE</span>
+            <h3 id="qr-modal-title" class="mt-small">Hospital Regional</h3>
+            <p class="section-desc mb-medium">Escanea este código QR para solicitar un intérprete de Lengua de Señas en vivo:</p>
+            
+            <div class="qr-image-container">
+                <img id="qr-modal-img" src="" alt="Código QR Empresa" width="220" height="220">
+            </div>
+
+            <p class="mb-medium"><code id="qr-modal-token" style="font-size: 1rem; color: var(--accent);">QR-TOKEN</code></p>
+            
+            <div style="display:flex; gap: 0.8rem; justify-content:center;">
+                <button class="btn-primary" onclick="window.print()">🖨️ Imprimir Tótem QR</button>
+                <button class="btn-outline" onclick="cerrarModalQR()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         WIDGET FLOTANTE DE CHATBOT IA (CASPE AI)
+         ========================================== -->
+    <div class="chatbot-container">
+        <!-- Ventana de Chat -->
+        <div id="chatbot-window" class="chatbot-window hidden">
+            <div class="chatbot-header">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div class="chatbot-avatar">🤖</div>
+                    <div>
+                        <strong style="font-size:0.95rem; display:block;">CaspIA Asistente Vitual</strong>
+                        <span style="font-size:0.72rem; color:#d8b4fe;">🟢 En línea • Soporte Inteligente</span>
+                    </div>
+                </div>
+                <button class="chatbot-close" onclick="toggleChatbot()">✕</button>
+            </div>
+
+            <!-- Mensajes -->
+            <div id="chatbot-messages" class="chatbot-messages">
+                <div class="chat-msg bot-msg">
+                    🤟 ¡Hola! Soy CaspIA de soporte de <strong>CASPE Iberoamérica</strong>. ¿En qué te puedo ayudar hoy?
+                </div>
+            </div>
+
+            <!-- Sugerencias rápidas de Preguntas Frecuentes (FAQ) -->
+            <div class="chatbot-suggestions">
+                <button onclick="enviarPreguntaRapida('¿Cómo funciona el código QR?')">📱 ¿Cómo usar el QR?</button>
+                <button onclick="enviarPreguntaRapida('¿Qué pasa si los intérpretes están ocupados?')">⏳ Cola de espera</button>
+                <button onclick="enviarPreguntaRapida('¿Cómo se descuentan los minutos del plan?')">📊 Planes y minutos</button>
+                <button onclick="enviarPreguntaRapida('¿Qué cursos de Lengua de Señas tienen?')">🎓 Cursos LSCh</button>
+            </div>
+
+            <!-- Input para escribir -->
+            <form class="chatbot-input-area" onsubmit="enviarMensajeChat(event)">
+                <input type="text" id="chatbot-input" placeholder="Escribe tu pregunta aquí..." autocomplete="off" required>
+                <button type="submit" class="btn-primary">Enviar</button>
+            </form>
+        </div>
+
+        <!-- Botón Burbuja Flotante -->
+        <button class="chatbot-fab" onclick="toggleChatbot()">
+            <span>🤖 CaspIA</span>
+        </button>
+    </div>
+
+    <script src="{% static 'intranet/app.js' %}"></script>
+</body>
+</html>
